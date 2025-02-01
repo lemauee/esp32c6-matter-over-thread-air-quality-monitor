@@ -6,43 +6,39 @@
    CONDITIONS OF ANY KIND, either express or implied.
 */
 
-#include "am2301_driver.h"
+#include "scd4x_driver.h"
 
 #include <esp_err.h>
 #include <esp_log.h>
 #include <esp_timer.h>
 #include <esp_random.h>
 
-#include "dht.h"
+#include "scd4x.h"
 
-static const char * TAG = "shtc3";
-
-#define I2C_MASTER_SCL_IO CONFIG_SHTC3_I2C_SCL_PIN
-#define I2C_MASTER_SDA_IO CONFIG_SHTC3_I2C_SDA_PIN
-#define I2C_MASTER_NUM I2C_NUM_0    /*!< I2C port number for master dev */
-#define I2C_MASTER_FREQ_HZ 100000   /*!< I2C master clock frequency */
-
-#define SHTC3_SENSOR_ADDR 0x70      /*!< I2C address of SHTC3 sensor */
+static const char * TAG = "scd4x";
 
 typedef struct {
-    am2301_sensor_config_t *config;
+    scd4x_sensor_config_t *config;
+    i2c_dev_t dev;
     esp_timer_handle_t timer;
     bool is_initialized = false;
-} am2301_sensor_ctx_t;
+} scd4x_sensor_ctx_t;
 
-static am2301_sensor_ctx_t s_ctx;
+static scd4x_sensor_ctx_t s_ctx;
 
 static void timer_cb_internal(void *arg)
 {
-    auto *ctx = (am2301_sensor_ctx_t *) arg;
+    auto *ctx = (scd4x_sensor_ctx_t *) arg;
     if (!(ctx && ctx->config)) {
         return;
     }
 
+    uint16_t co2;
     float temp, humidity;
-    esp_err_t err = dht_read_float_data(DHT_TYPE_AM2301, GPIO_NUM_0,
-        &humidity, &temp);
+
+    esp_err_t err = scd4x_read_measurement(&s_ctx.dev, &co2, &temp, &humidity);
     if (err != ESP_OK) {
+        ESP_LOGE(TAG, "scd4x_read_measurement failed, err:%d", err);
         return;
     }
     if (ctx->config->temperature.cb) {
@@ -53,7 +49,7 @@ static void timer_cb_internal(void *arg)
     }
 }
 
-esp_err_t am2301_sensor_init(am2301_sensor_config_t *config)
+esp_err_t scd4x_sensor_init(scd4x_sensor_config_t *config)
 {
     if (config == NULL) {
         return ESP_ERR_INVALID_ARG;
@@ -67,14 +63,26 @@ esp_err_t am2301_sensor_init(am2301_sensor_config_t *config)
     }
 
     // keep the pointer to config
-    s_ctx.config = config;
+    s_ctx.config = config;    
+
+    esp_err_t err = scd4x_init_desc(&s_ctx.dev, 0, GPIO_NUM_6, GPIO_NUM_7);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "scd4x_init_desc failed, err:%d", err);
+        return err;
+    }
+
+    err =  scd4x_start_periodic_measurement(&s_ctx.dev);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "scd4x_start_periodic_measurement failed, err:%d", err);
+        return err;
+    }
 
     esp_timer_create_args_t args = {
         .callback = timer_cb_internal,
         .arg = &s_ctx,
     };
 
-    esp_err_t err = esp_timer_create(&args, &s_ctx.timer);
+    err = esp_timer_create(&args, &s_ctx.timer);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "esp_timer_create failed, err:%d", err);
         return err;

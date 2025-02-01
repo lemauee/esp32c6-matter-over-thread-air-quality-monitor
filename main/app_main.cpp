@@ -42,7 +42,7 @@
 #include <app/server/CommissioningWindowManager.h>
 #include <app/server/Server.h>
 
-#include "am2301/am2301_driver.h"
+#include "scd4x/scd4x_driver.h"
 #include "relay/relay_driver.h"
 #include "switch/switch_driver.h"
 #include "reset_button/reset_button_driver.h"
