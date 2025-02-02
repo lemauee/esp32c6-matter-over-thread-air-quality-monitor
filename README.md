@@ -1,6 +1,6 @@
-# ESP32 C6 Matter Over Thread Roof Window Controller
+# ESP32 C6 Matter Over Thread Air Quality Monitor
 
-Smart home matter over thread roof window controller based on an Espressif ESP32 C6 EVB from Olimex. I use this via a Home Assistant ZBT-1 / Skyconnect running as Thread boarder router. Uses an AM2301 (Similar to DHT11/DHT21) temperature/humidity sensor.
+Smart home matter over thread air quality monitor based on the ESP32 C6. I use this via a Home Assistant ZBT-1 / Skyconnect running as Thread boarder router. Uses an Sensirion SCD40 CO2 sensor.
 
 ## Setup
 
@@ -45,9 +45,15 @@ Enable the open thread web port in the open thread border router addon. Navigate
 ## Build & Flash
 
 0. Source ESP IDF and ESP Matter: `cd esp-idf` `source ./export.sh` `cd esp-matter` `source ./export.sh`
-1. Switch to this repos root: `cd esp32c6-matter-over-thread-roof-window-controller`
-2. Set target: `idf.py set-target esp32c6`
-3. Build: `idf.py build`
-4. Plug in your board and erase flash: `idf.py erase_flash`
-5. Flash & monitor console: `idf.py flash monitor`
+1. Get the ESP-IDF-LIB containing the SCD40 driver: https://github.com/UncleRus/esp-idf-lib/tree/master
+2. Delete the button and led_strip folders from the esp-idf-lib components folder. They lead to naming conflicts with the current ESP IDF and ESP Matter version.
+3. Adapt the path to the ESP-IDF-LIB in CMakeLists.txt.
+4. Switch to this repos root: `cd esp32c6-matter-over-thread-air-quality-sensor`
+5. Set target: `idf.py set-target esp32c6`
+6. Build: `idf.py build`
+7. Plug in your board and erase flash: `idf.py erase_flash`
+8. Flash & monitor console: `idf.py flash monitor`
+
+## Known issues.
+* Needs a cold start of the esp since scd4x_wake_up crashes when the sensor was used beforehand.
 
