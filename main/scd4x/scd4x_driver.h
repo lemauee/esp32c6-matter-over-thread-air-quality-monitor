@@ -15,19 +15,26 @@
 
 #include <esp_err.h>
 
-using am2301_sensor_cb_t = void (*)(uint16_t endpoint_id, float value, void *user_data);
+using scd4x_sensor_cb_t = void (*)(uint16_t endpoint_id, float value, void *user_data);
 
 typedef struct {
     struct {
+        // This callback functon will be called periodically to report the co2 level
+        scd4x_sensor_cb_t cb = NULL;
+        // endpoint_id associated with co2 sensor
+        uint16_t endpoint_id;
+    } co2;
+
+    struct {
         // This callback functon will be called periodically to report the temperature.
-        am2301_sensor_cb_t cb = NULL;
+        scd4x_sensor_cb_t cb = NULL;
         // endpoint_id associated with temperature sensor
         uint16_t endpoint_id;
     } temperature;
 
     struct {
         // This callback functon will be called periodically to report the humidity.
-        am2301_sensor_cb_t cb = NULL;
+        scd4x_sensor_cb_t cb = NULL;
         // endpoint_id associated with humidity sensor
         uint16_t endpoint_id;
     } humidity;
@@ -37,7 +44,7 @@ typedef struct {
 
     // polling interval in milliseconds, defaults to 5000 ms
     uint32_t interval_ms = 5000;
-} am2301_sensor_config_t;
+} scd4x_sensor_config_t;
 
 /**
  * @brief Initialize sensor driver. This function should be called only once
@@ -52,4 +59,4 @@ typedef struct {
  *                     ESP_ERR_INVALID_STATE if driver is already initialized
  *                     appropriate error code otherwise
  */
-esp_err_t am2301_sensor_init(am2301_sensor_config_t *config);
+esp_err_t scd4x_sensor_init(scd4x_sensor_config_t *config);

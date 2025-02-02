@@ -67,6 +67,22 @@ static const char *s_decryption_key = decryption_key_start;
 static const uint16_t s_decryption_key_len = decryption_key_end - decryption_key_start;
 #endif // CONFIG_ENABLE_ENCRYPTED_OTA
 
+static void co2_sensor_notification(uint16_t endpoint_id, float co2, void *user_data)
+{
+    // schedule the attribute update so that we can report it from matter thread
+    chip::DeviceLayer::SystemLayer().ScheduleLambda([endpoint_id, co2]() {
+        attribute_t * attribute = attribute::get(endpoint_id,
+                                                 CarbonDioxideConcentrationMeasurement::Id,
+                                                 CarbonDioxideConcentrationMeasurement::Attributes::MeasuredValue::Id);
+
+        esp_matter_attr_val_t val = esp_matter_invalid(NULL);
+        attribute::get_val(attribute, &val);
+        val.val.f = co2;
+
+        attribute::update(endpoint_id, CarbonDioxideConcentrationMeasurement::Id, CarbonDioxideConcentrationMeasurement::Attributes::MeasuredValue::Id, &val);
+    });
+}
+
 // Application cluster specification, 7.18.2.11. Temperature
 // represents a temperature on the Celsius scale with a resolution of 0.01°C.
 // temp = (temperature in °C) x 100
@@ -257,18 +273,37 @@ extern "C" void app_main()
         cluster::switch_cluster::feature::latching_switch::add(switch_cluster);
     }
 
+    // add air quality sensor device
+    air_quality_sensor::config_t air_quality_sensor_config;
+    endpoint_t * air_quality_sensor_ep = air_quality_sensor::create(node, &air_quality_sensor_config, ENDPOINT_FLAG_NONE, NULL);
+    ABORT_APP_ON_FAILURE(air_quality_sensor_ep != nullptr, ESP_LOGE(TAG, "Failed to create air_quality_sensor endpoint"));
+
+    cluster::create(air_quality_sensor_ep, CarbonDioxideConcentrationMeasurement::Id, CLUSTER_FLAG_SERVER);
+    cluster_t *cluster_co2 = cluster::get(air_quality_sensor_ep, CarbonDioxideConcentrationMeasurement::Id);
+    ABORT_APP_ON_FAILURE(cluster_co2 != nullptr, ESP_LOGE(TAG, "Failed to create air quality sensor device cluster"));
+
+    cluster::carbon_dioxide_concentration_measurement::feature::numeric_measurement::config_t feature_co2_config;
+    feature_co2_config.measured_value = 1000;
+    feature_co2_config.min_measured_value = 1;
+    feature_co2_config.max_measured_value = 10000;
+    feature_co2_config.measurement_unit = 0;
+    cluster::carbon_dioxide_concentration_measurement::feature::numeric_measurement::add(cluster_co2, &feature_co2_config);
+
     // add temperature sensor device
     temperature_sensor::config_t temp_sensor_config;
     endpoint_t * temp_sensor_ep = temperature_sensor::create(node, &temp_sensor_config, ENDPOINT_FLAG_NONE, NULL);
     ABORT_APP_ON_FAILURE(temp_sensor_ep != nullptr, ESP_LOGE(TAG, "Failed to create temperature_sensor endpoint"));
-
     // add the humidity sensor device
     humidity_sensor::config_t humidity_sensor_config;
     endpoint_t * humidity_sensor_ep = humidity_sensor::create(node, &humidity_sensor_config, ENDPOINT_FLAG_NONE, NULL);
     ABORT_APP_ON_FAILURE(humidity_sensor_ep != nullptr, ESP_LOGE(TAG, "Failed to create humidity_sensor endpoint"));
 
-    // initialize temperature and humidity sensor driver (shtc3)
-    static am2301_sensor_config_t shtc3_config = {
+    // initialize co2, temperature and humidity sensor driver (scd4x)
+    static scd4x_sensor_config_t scd4x_config = {
+        .co2 = {
+            .cb = co2_sensor_notification,
+            .endpoint_id = endpoint::get_id(air_quality_sensor_ep)
+        },
         .temperature = {
             .cb = temp_sensor_notification,
             .endpoint_id = endpoint::get_id(temp_sensor_ep),
@@ -276,9 +311,9 @@ extern "C" void app_main()
         .humidity = {
             .cb = humidity_sensor_notification,
             .endpoint_id = endpoint::get_id(humidity_sensor_ep),
-        },
+        }
     };
-    err = am2301_sensor_init(&shtc3_config);
+    err = scd4x_sensor_init(&scd4x_config);
     ABORT_APP_ON_FAILURE(err == ESP_OK, ESP_LOGE(TAG, "Failed to initialize temperature sensor driver"));
 
 #if CHIP_DEVICE_CONFIG_ENABLE_THREAD

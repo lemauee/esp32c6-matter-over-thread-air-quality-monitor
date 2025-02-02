@@ -13,7 +13,7 @@
 #include <esp_timer.h>
 #include <esp_random.h>
 
-#include "scd4x.h"
+#include <scd4x.h>
 
 static const char * TAG = "scd4x";
 
@@ -41,6 +41,9 @@ static void timer_cb_internal(void *arg)
         ESP_LOGE(TAG, "scd4x_read_measurement failed, err:%d", err);
         return;
     }
+    if (ctx->config->co2.cb){
+        ctx->config->co2.cb(ctx->config->co2.endpoint_id, static_cast<float>(co2), ctx->config->user_data);
+    }
     if (ctx->config->temperature.cb) {
         ctx->config->temperature.cb(ctx->config->temperature.endpoint_id, temp, ctx->config->user_data);
     }
@@ -65,11 +68,19 @@ esp_err_t scd4x_sensor_init(scd4x_sensor_config_t *config)
     // keep the pointer to config
     s_ctx.config = config;    
 
-    esp_err_t err = scd4x_init_desc(&s_ctx.dev, 0, GPIO_NUM_6, GPIO_NUM_7);
+    ESP_ERROR_CHECK(i2cdev_init());
+
+    esp_err_t err = scd4x_init_desc(&s_ctx.dev, I2C_NUM_0, GPIO_NUM_6, GPIO_NUM_7);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "scd4x_init_desc failed, err:%d", err);
         return err;
     }
+
+    ESP_LOGI(TAG, "Initializing sensor...");
+    ESP_ERROR_CHECK(scd4x_wake_up(&s_ctx.dev));
+    ESP_ERROR_CHECK(scd4x_stop_periodic_measurement(&s_ctx.dev));
+    ESP_ERROR_CHECK(scd4x_reinit(&s_ctx.dev));
+    ESP_LOGI(TAG, "Sensor initialized");
 
     err =  scd4x_start_periodic_measurement(&s_ctx.dev);
     if (err != ESP_OK) {
